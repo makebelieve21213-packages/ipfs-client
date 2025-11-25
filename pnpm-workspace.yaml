@@ -1,0 +1,3 @@
+onlyBuiltDependencies:
+  - '@ipshipyard/node-datachannel'
+  - '@nestjs/core'

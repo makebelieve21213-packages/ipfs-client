@@ -1,0 +1,158 @@
+# @packages/ipfs-client - Документация для ИИ
+
+## Краткое описание
+
+IPFS клиент для NestJS с поддержкой TypeScript и полной типобезопасностью. Предоставляет готовый NestJS глобальный модуль для простой интеграции и работы с IPFS через helia.
+
+## Архитектура
+
+Пакет предоставляет NestJS глобальный модуль `IpfsCoreModule` для работы с IPFS через HTTP gateway с использованием helia.
+
+## Структура пакета
+
+```
+src/
+├── main/                                 # NestJS модуль
+│   ├── ipfs-core.module.ts               # IpfsCoreModule - глобальный модуль
+│   └── ipfs-core.service.ts              # IpfsCoreService - основной сервис
+│
+├── types/                                # TypeScript типы и интерфейсы
+│   └── ipfs-config.ts                    # IpfsConfig - конфигурация модуля
+│
+├── utils/                                # Утилиты
+│   └── injections.ts                     # Ключи для DI
+│
+└── index.ts                              # Точка входа - экспорты всех публичных API
+```
+
+## Основные компоненты
+
+### IpfsCoreModule
+
+NestJS глобальный модуль для регистрации IpfsCoreService. Поддерживает асинхронную регистрацию:
+- `forRootAsync(options)` - асинхронная конфигурация через useFactory
+- Экспортирует `IpfsCoreService` глобально
+
+### IpfsCoreService
+
+Сервис для работы с IPFS:
+- Конструктор принимает `IpfsConfig` через DI
+- `addFile(data)` - добавление файла в IPFS (строка или Uint8Array)
+- `addJson(obj)` - добавление JSON объекта в IPFS
+- `getFile(cid)` - получение файла из IPFS по CID
+
+### IpfsConfig
+
+Конфигурация для настройки клиента:
+- `url` - URL IPFS узла (например, http://localhost:5001)
+
+## Использование
+
+### Создание конфигурации в сервисе
+
+Создайте файл конфигурации в вашем сервисе (например, `services/chat-service/src/configs/ipfs.config.ts`):
+
+```typescript
+// ipfs.config.ts
+import { registerAs } from "@nestjs/config";
+import type { IpfsConfig } from "@packages/ipfs-client";
+import { CONFIG_SYMBOLS } from "@packages/types";
+
+const ipfsConfig = registerAs<IpfsConfig>(CONFIG_SYMBOLS.IPFS_CONFIG, () => ({
+    url: process.env.IPFS_URL || "http://localhost:5001",
+}));
+
+export default ipfsConfig;
+```
+
+### Регистрация модуля
+
+```typescript
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { IpfsCoreModule } from '@packages/ipfs-client';
+import ipfsConfig from 'src/configs/ipfs.config';
+import type { IpfsConfig } from '@packages/ipfs-client';
+import { CONFIG_SYMBOLS } from '@packages/types';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [ipfsConfig],
+    }),
+    IpfsCoreModule.forRootAsync({
+      useFactory: (...args: unknown[]) => {
+        const configService = args[0] as ConfigService;
+        return configService.get<IpfsConfig>(CONFIG_SYMBOLS.IPFS_CONFIG)!;
+      },
+      inject: [ConfigService],
+      imports: [ConfigModule],
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+### Использование сервиса
+
+```typescript
+// file.service.ts
+import { Injectable } from '@nestjs/common';
+import { IpfsCoreService } from '@packages/ipfs-client';
+
+@Injectable()
+export class FileService {
+  constructor(private readonly ipfs: IpfsCoreService) {}
+
+  async saveFile(data: string): Promise<string> {
+    return await this.ipfs.addFile(data);
+  }
+
+  async getFile(cid: string): Promise<Buffer> {
+    return await this.ipfs.getFile(cid);
+  }
+
+  async saveJson(obj: object): Promise<string> {
+    return await this.ipfs.addJson(obj);
+  }
+}
+```
+
+## Переменные окружения
+
+- `IPFS_URL` - URL IPFS узла (по умолчанию: `http://localhost:5001`)
+
+## Экспорты (index.ts)
+
+Пакет экспортирует:
+
+Модули:
+- `IpfsCoreModule` (default export)
+
+Сервисы:
+- `IpfsCoreService` (default export)
+
+Типы:
+- `IpfsConfig`
+
+## Важные замечания
+
+1. **Конфигурация**: Конфигурация должна создаваться в сервисе, который использует пакет, а не в самом пакете
+2. **IPFS узел**: Требуется запущенный IPFS узел (например, go-ipfs) перед использованием
+3. **Обработка ошибок**: Все ошибки логируются через `LoggerService` из `@makebelieve21213-packages/logger`
+4. **Типы данных**: Поддерживает строки и Uint8Array для добавления файлов
+
+## Тестирование
+
+Пакет имеет высокое покрытие тестами. Все компоненты протестированы через Jest.
+
+## Зависимости
+
+- `@nestjs/common` - NestJS core
+- `@nestjs/config` - NestJS config (опционально, для async конфигурации)
+- `@makebelieve21213-packages/logger` - Логирование
+- `helia` - IPFS клиент
+- `@helia/http` - HTTP gateway для helia
+- `reflect-metadata` - TypeScript decorators

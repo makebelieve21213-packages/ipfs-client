@@ -1,0 +1,94 @@
+{
+  "name": "@makebelieve21213-packages/ipfs-client",
+  "version": "1.0.0",
+  "description": "IPFS client module for NestJS to manage decentralized data storage and transfer for NFT metadata",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/makebelieve21213-packages/ipfs-client.git"
+  },
+  "homepage": "https://github.com/makebelieve21213-packages/ipfs-client#readme",
+  "bugs": {
+    "url": "https://github.com/makebelieve21213-packages/ipfs-client/issues"
+  },
+  "keywords": [
+    "ipfs",
+    "decentralized-storage",
+    "nestjs",
+    "nft",
+    "metadata",
+    "web3",
+    "typescript"
+  ],
+  "author": "Skryabin Aleksey",
+  "license": "MIT",
+  "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=22.11.0",
+    "pnpm": ">=10.18.0"
+  },
+  "scripts": {
+    "build": "pnpm run clean && tsc --build && tsc-alias && tsc-esm-fix",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "tsc --noEmit && eslint \"src/**/*.ts\"",
+    "lint:fix": "tsc --noEmit && eslint \"src/**/*.ts\" --fix",
+    "format": "prettier --check \"src/**/*.ts\"",
+    "format:fix": "prettier --write \"src/**/*.ts\"",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@makebelieve21213-packages/logger": "^1.0.7",
+    "@makebelieve21213-packages/prometheus-client": "^1.0.2",
+    "@makebelieve21213-packages/redis-client": "^1.0.1",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.2",
+    "@helia/block-brokers": "^2.0.0",
+    "@helia/http": "^1.0.0",
+    "@helia/unixfs": "^2.0.0",
+    "buffer": "^6.0.3",
+    "helia": "^5.0.0",
+    "multiformats": "^13.4.1",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.1",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "jiti": "^2.4.0",
+    "prettier": "^3.3.0",
+    "rimraf": "^6.0.1",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.10",
+    "tsc-esm-fix": "^3.1.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "reflect-metadata": "^0.1.13 || ^0.2.0",
+    "rxjs": "^7.8.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
