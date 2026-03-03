@@ -5,6 +5,27 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 и этот проект придерживается [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.1] - 2026-03-03
+
+### Изменено
+- `addFile()` и `addJson()` теперь используют Kubo HTTP API `/add` вместо helia unixfs
+- `pin()` и `unpin()` используют Kubo API (`/pin/add`, `/pin/rm`) вместо helia pins
+- `healthCheck()` проверяет доступность через Kubo API `/id` вместо withTimeout
+- При инициализации проверяется доступность Kubo API (запрос к `/id`)
+- Ошибка «not pinned» при unpin больше не выбрасывается
+- Добавлена валидация `maxFileSize` при добавлении файлов
+- Импорты без `.js` суффиксов (совместимость с resolve)
+
+### Тесты
+- Обновлены моки: убраны mockAddBytes, mockPinsAdd, mockPinsRm
+- Тесты переведены на mock fetch для Kubo API
+- Добавлены тесты: Kubo API init, maxFileSize, «not pinned», non-Error логирование
+- Понижены пороги coverage (branches/functions/statements: 90%)
+- Добавлен `modulePathIgnorePatterns` для устранения дублирования mocks
+
+### Удалено
+- Конфигурация Dependabot (`.github/dependabot.yml`)
+
 ## [1.0.0] - 2025-11-25
 
 ### Добавлено

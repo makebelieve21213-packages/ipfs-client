@@ -5,19 +5,19 @@ import { createHeliaHTTP, type Helia } from "@helia/http";
 import { unixfs } from "@helia/unixfs";
 import { LoggerService } from "@makebelieve21213-packages/logger";
 import { Inject, Injectable } from "@nestjs/common";
-import { CID } from "multiformats";
-import CoreService from "src/core/core.service.js";
-import IpfsError from "src/errors/ipfs.error.js";
-import { IpfsErrorType } from "src/types/ipfs-error.types.js";
-import { IPFS_CONFIG_TOKEN } from "src/utils/injections.js";
+import CoreService from "src/core/core.service";
+import IpfsError from "src/errors/ipfs.error";
+import { IpfsErrorType } from "src/types/ipfs-error.types";
+import { IPFS_CONFIG_TOKEN } from "src/utils/injections";
 
-import type IpfsConfig from "src/types/ipfs-config.js";
-import type IpfsCoreServiceDto from "src/types/ipfs-core.interface.js";
-import type { FileMetadata } from "src/types/ipfs-core.interface.js";
+import type IpfsConfig from "src/types/ipfs-config";
+import type IpfsCoreServiceDto from "src/types/ipfs-core.interface";
+import type { FileMetadata } from "src/types/ipfs-core.interface";
 
 // Сервис по управлению клиентов ipfs-core для подключения к сети ipfs
 @Injectable()
 export default class IpfsCoreService extends CoreService implements IpfsCoreServiceDto {
+	private kuboApiUrl!: string;
 	private helia!: Helia;
 	private fs!: ReturnType<typeof unixfs>;
 
@@ -34,10 +34,25 @@ export default class IpfsCoreService extends CoreService implements IpfsCoreServ
 		await super.onModuleInit();
 
 		try {
-			// Получаем массив gateway URLs
-			const gateways = Array.isArray(this.config.url) ? this.config.url : [this.config.url];
+			// Извлекаем kuboApiUrl из config
+			const urls = Array.isArray(this.config.url) ? this.config.url : [this.config.url];
+			this.kuboApiUrl = urls[0].replace(/\/+$/, "");
 
-			// Создаем helia клиент с кастомными опциями
+			// Проверяем доступность Kubo
+			const idRes = await fetch(`${this.kuboApiUrl}/id`, {
+				method: "POST",
+				signal: AbortSignal.timeout(5000),
+			});
+			if (!idRes.ok) {
+				throw new Error(`Kubo API returned ${idRes.status}`);
+			}
+			const idData = (await idRes.json()) as { ID?: string };
+			this.logger.log(
+				`IPFS Kubo API initialized - peerId: ${idData.ID ?? "unknown"}, url: ${this.kuboApiUrl}`
+			);
+
+			// Инициализируем Helia для read-операций (gateways)
+			const gateways = urls;
 			const heliaOptions = {
 				blockBrokers: [
 					trustlessGateway({
@@ -109,15 +124,24 @@ export default class IpfsCoreService extends CoreService implements IpfsCoreServ
 		this.validateDataSize(input);
 
 		try {
-			const cid = await this.withRetry(
+			const cidStr = await this.withRetry(
 				async () => {
-					return await this.fs.addBytes(input);
+					const formData = new FormData();
+					formData.append("file", new Blob([input]));
+					const res = await fetch(`${this.kuboApiUrl}/add?pin=true&cid-version=1`, {
+						method: "POST",
+						body: formData,
+					});
+					if (!res.ok) {
+						const text = await res.text().catch(() => "");
+						throw new Error(`Kubo /add failed: status=${res.status} ${text}`);
+					}
+					const json = (await res.json()) as { Hash: string };
+					return json.Hash;
 				},
 				"addFile",
 				{ size: input.length }
 			);
-
-			const cidStr = cid.toString();
 			const duration = Date.now() - startTime;
 
 			this.logMetrics("addFile", duration, input.length, true);
@@ -274,27 +298,17 @@ export default class IpfsCoreService extends CoreService implements IpfsCoreServ
 		this.ensureInitialized();
 
 		const startTime = Date.now();
-		const cid = this.validateCid(cidStr);
+		this.validateCid(cidStr);
 
 		try {
 			await this.withRetry(
 				async () => {
-					// Используем helia pinning API если доступен
-					if (this.helia.pins) {
-						const pins = this.helia.pins as unknown as { add: (cid: CID) => AsyncGenerator<CID> };
-
-						if (typeof pins.add === "function") {
-							// Потребляем async generator
-							for await (const _ of pins.add(cid)) {
-								// Игнорируем результат
-							}
-						} else {
-							// Fallback: просто проверяем существование
-							await this.fs.stat(cid);
-						}
-					} else {
-						// Fallback: просто проверяем существование
-						await this.fs.stat(cid);
+					const res = await fetch(`${this.kuboApiUrl}/pin/add?arg=${cidStr}`, {
+						method: "POST",
+					});
+					if (!res.ok) {
+						const text = await res.text().catch(() => "");
+						throw new Error(`Kubo /pin/add failed: status=${res.status} ${text}`);
 					}
 				},
 				"pin",
@@ -317,20 +331,19 @@ export default class IpfsCoreService extends CoreService implements IpfsCoreServ
 		this.ensureInitialized();
 
 		const startTime = Date.now();
-		const cid = this.validateCid(cidStr);
+		this.validateCid(cidStr);
 
 		try {
 			await this.withRetry(
 				async () => {
-					// Используем helia pinning API если доступен
-					if (this.helia.pins) {
-						const pins = this.helia.pins as unknown as { rm: (cid: CID) => AsyncGenerator<CID> };
-						if (typeof pins.rm === "function") {
-							// Потребляем async generator
-							for await (const _ of pins.rm(cid)) {
-								// Игнорируем результат
-							}
-						}
+					const res = await fetch(`${this.kuboApiUrl}/pin/rm?arg=${cidStr}`, {
+						method: "POST",
+					});
+					if (!res.ok) {
+						const text = await res.text().catch(() => "");
+						// "not pinned" — не ошибка, просто уже не запинен
+						if (text.includes("not pinned")) return;
+						throw new Error(`Kubo /pin/rm failed: status=${res.status} ${text}`);
 					}
 				},
 				"unpin",
@@ -350,17 +363,15 @@ export default class IpfsCoreService extends CoreService implements IpfsCoreServ
 
 	// Проверяет доступность IPFS.
 	async healthCheck(): Promise<boolean> {
-		if (!this.isInitialized || !this.helia) {
+		if (!this.isInitialized || !this.kuboApiUrl) {
 			return false;
 		}
-
 		try {
-			// Пытаемся выполнить простую операцию для проверки доступности
-			await this.withTimeout(async () => {
-				// Просто проверяем, что helia инициализирован
-				return true;
-			}, "healthCheck");
-			return true;
+			const res = await fetch(`${this.kuboApiUrl}/id`, {
+				method: "POST",
+				signal: AbortSignal.timeout(5000),
+			});
+			return res.ok;
 		} catch {
 			return false;
 		}

@@ -1,12 +1,9 @@
 import { Buffer } from "buffer";
 
 import {
-	mockAddBytes,
 	mockCat,
 	mockStat,
 	mockStop,
-	mockPinsAdd,
-	mockPinsRm,
 	mockHelia,
 	mockFs,
 	createHeliaHTTP,
@@ -17,27 +14,45 @@ import IpfsError from "src/errors/ipfs.error";
 import IpfsCoreService from "src/main/ipfs-core.service";
 import { IpfsErrorType } from "src/types/ipfs-error.types";
 
-import type { Helia } from "@helia/http";
 import type { LoggerService } from "@makebelieve21213-packages/logger";
-import type { CID } from "multiformats";
 import type IpfsConfig from "src/types/ipfs-config";
 
-// Импортируем моки после объявления jest.mock
+// Kubo API base URL для тестов
+const KUBO_API_URL = "http://localhost:5001/api/v0";
 
 describe("IpfsCoreService", () => {
 	let service: IpfsCoreService;
 	let loggerService: jest.Mocked<LoggerService>;
+	let fetchMock: jest.SpyInstance;
 
 	const mockConfig: IpfsConfig = {
-		url: "http://localhost:5001",
+		url: KUBO_API_URL,
 	};
 
 	beforeEach(async () => {
 		jest.clearAllMocks();
 
-		mockAddBytes.mockResolvedValue({
-			toString: () => "mockedCID",
-		});
+		// Мокируем fetch для Kubo API
+		fetchMock = jest
+			.spyOn(global, "fetch")
+			.mockImplementation(async (...args: Parameters<typeof fetch>) => {
+				const input = args[0];
+				const url =
+					typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+				if (url.includes("/id")) {
+					return { ok: true, json: async () => ({ ID: "test-peer-id" }) } as Response;
+				}
+				if (url.includes("/add")) {
+					return { ok: true, json: async () => ({ Hash: "mockedCID" }) } as Response;
+				}
+				if (url.includes("/pin/add")) {
+					return { ok: true } as Response;
+				}
+				if (url.includes("/pin/rm")) {
+					return { ok: true } as Response;
+				}
+				return { ok: false } as Response;
+			});
 
 		mockCat.mockReturnValue({
 			[Symbol.asyncIterator]: async function* () {
@@ -63,6 +78,9 @@ describe("IpfsCoreService", () => {
 	});
 
 	afterEach(() => {
+		if (typeof fetchMock !== "undefined") {
+			fetchMock.mockRestore();
+		}
 		jest.clearAllMocks();
 	});
 
@@ -103,18 +121,42 @@ describe("IpfsCoreService", () => {
 	});
 
 	describe("onModuleInit", () => {
-		it("должен создать IPFS клиент с правильным URL", async () => {
+		it("должен проверить Kubo API и создать IPFS клиент с правильным URL", async () => {
 			await service.onModuleInit();
 
+			expect(fetchMock).toHaveBeenCalledWith(
+				`${KUBO_API_URL}/id`,
+				expect.objectContaining({ method: "POST" })
+			);
 			expect(trustlessGateway).toHaveBeenCalledWith({
 				gateways: [mockConfig.url],
 			});
 			expect(createHeliaHTTP).toHaveBeenCalled();
 			expect(unixfs).toHaveBeenCalledWith(mockHelia);
 			expect(service["helia"]).toBe(mockHelia);
+			expect(service["kuboApiUrl"]).toBe(KUBO_API_URL);
 			expect(loggerService.log).toHaveBeenCalledWith(
-				expect.stringMatching(/IPFS service initialized successfully/)
+				expect.stringMatching(/IPFS Kubo API initialized/)
 			);
+		});
+
+		it("должен использовать 'unknown' для peerId когда Kubo /id не возвращает ID", async () => {
+			fetchMock.mockImplementation(async (input: unknown) => {
+				const url =
+					typeof input === "string"
+						? input
+						: input instanceof URL
+							? input.toString()
+							: ((input as { url?: string })?.url ?? "");
+				if (url.includes("/id")) {
+					return { ok: true, json: async () => ({}) } as Response;
+				}
+				return { ok: false } as Response;
+			});
+
+			await service.onModuleInit();
+
+			expect(loggerService.log).toHaveBeenCalledWith(expect.stringMatching(/peerId: unknown, url:/));
 		});
 
 		it("должен обработать ошибку при инициализации и выбросить IpfsError", async () => {
@@ -123,6 +165,12 @@ describe("IpfsCoreService", () => {
 
 			await expect(service.onModuleInit()).rejects.toThrow(IpfsError);
 			expect(loggerService.error).toHaveBeenCalled();
+		});
+
+		it("должен обработать ошибку Kubo API при инициализации", async () => {
+			fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+
+			await expect(service.onModuleInit()).rejects.toThrow(IpfsError);
 		});
 
 		it("должен обернуть ошибку в IpfsError с правильным сообщением и причиной", async () => {
@@ -189,41 +237,55 @@ describe("IpfsCoreService", () => {
 			await service.onModuleInit();
 		});
 
-		it("должен добавить строку в IPFS и вернуть CID", async () => {
+		it("должен добавить строку в IPFS через Kubo API и вернуть CID", async () => {
 			const testString = "Hello, IPFS!";
-			const expectedCid = "QmTest123";
-
-			mockAddBytes.mockResolvedValue({
-				toString: () => expectedCid,
-			});
+			const expectedCid = "mockedCID";
 
 			const result = await service.addFile(testString);
 
-			expect(mockAddBytes).toHaveBeenCalledWith(new TextEncoder().encode(testString));
+			expect(fetchMock).toHaveBeenCalledWith(
+				expect.stringContaining("/add?pin=true&cid-version=1"),
+				expect.objectContaining({ method: "POST" })
+			);
 			expect(result).toBe(expectedCid);
 		});
 
-		it("должен добавить Uint8Array в IPFS и вернуть CID", async () => {
+		it("должен добавить Uint8Array в IPFS через Kubo API и вернуть CID", async () => {
 			const testData = new Uint8Array([1, 2, 3, 4, 5]);
-			const expectedCid = "QmTest456";
-
-			mockAddBytes.mockResolvedValue({
-				toString: () => expectedCid,
-			});
+			const expectedCid = "mockedCID";
 
 			const result = await service.addFile(testData);
 
-			expect(mockAddBytes).toHaveBeenCalledWith(testData);
+			expect(fetchMock).toHaveBeenCalledWith(
+				expect.stringContaining("/add"),
+				expect.objectContaining({ method: "POST", body: expect.any(FormData) })
+			);
 			expect(result).toBe(expectedCid);
 		});
 
-		it("должен передавать ошибки от IPFS клиента", async () => {
-			const testString = "test";
-			const error = new Error("IPFS connection failed");
+		it("должен передавать ошибки от Kubo API", async () => {
+			service["config"].retry = { maxAttempts: 1, delay: 0 };
+			fetchMock.mockResolvedValue({
+				ok: false,
+				status: 500,
+				text: async () => "Internal Server Error",
+			});
 
-			mockAddBytes.mockRejectedValue(error);
+			await expect(service.addFile("test")).rejects.toThrow(IpfsError);
+		});
 
-			await expect(service.addFile(testString)).rejects.toThrow(IpfsError);
+		it("должен выбросить ошибку при превышении maxFileSize", async () => {
+			const configWithLimit: IpfsConfig = {
+				...mockConfig,
+				maxFileSize: 10,
+			};
+			const serviceWithLimit = new IpfsCoreService(configWithLimit, loggerService);
+			await serviceWithLimit.onModuleInit();
+
+			const largeData = new Uint8Array(100);
+
+			await expect(serviceWithLimit.addFile(largeData)).rejects.toThrow(IpfsError);
+			expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/add"), expect.any(Object));
 		});
 	});
 
@@ -232,28 +294,25 @@ describe("IpfsCoreService", () => {
 			await service.onModuleInit();
 		});
 
-		it("должен добавить простой объект в IPFS", async () => {
+		it("должен добавить простой объект в IPFS через addFile", async () => {
 			const testObject = { name: "test", value: 123 };
-			const expectedCid = "QmJsonTest";
-
-			mockAddBytes.mockResolvedValue({
-				toString: () => expectedCid,
-			});
+			const expectedCid = "mockedCID";
 
 			const result = await service.addJson(testObject);
 
-			const expectedBuffer = Buffer.from(JSON.stringify(testObject));
-			expect(mockAddBytes).toHaveBeenCalledWith(expectedBuffer);
+			expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/add"), expect.any(Object));
 			expect(result).toBe(expectedCid);
 		});
 
-		it("должен передавать ошибки от IPFS клиента при добавлении JSON", async () => {
-			const testObject = { test: "data" };
-			const error = new Error("JSON add failed");
+		it("должен передавать ошибки от Kubo API при добавлении JSON", async () => {
+			service["config"].retry = { maxAttempts: 1, delay: 0 };
+			fetchMock.mockResolvedValue({
+				ok: false,
+				status: 500,
+				text: async () => "Add failed",
+			});
 
-			mockAddBytes.mockRejectedValue(error);
-
-			await expect(service.addJson(testObject)).rejects.toThrow(IpfsError);
+			await expect(service.addJson({ test: "data" })).rejects.toThrow(IpfsError);
 		});
 	});
 
@@ -476,58 +535,26 @@ describe("IpfsCoreService", () => {
 			await service.onModuleInit();
 		});
 
-		it("должен закрепить файл используя pins.add", async () => {
+		it("должен закрепить файл через Kubo /pin/add", async () => {
 			const testCid = "QmPin";
-			mockPinsAdd.mockReturnValue({
-				[Symbol.asyncIterator]: async function* () {
-					yield {} as CID;
-				},
-			});
 
 			await service.pin(testCid);
 
-			expect(mockPinsAdd).toHaveBeenCalled();
+			expect(fetchMock).toHaveBeenCalledWith(
+				`${KUBO_API_URL}/pin/add?arg=${testCid}`,
+				expect.objectContaining({ method: "POST" })
+			);
 			expect(loggerService.log).toHaveBeenCalledWith(expect.stringMatching(/File pinned/));
-		});
-
-		it("должен использовать fallback если pins.add не функция", async () => {
-			const testCid = "QmPinFallback";
-			service["helia"].pins = { add: null, rm: mockPinsRm } as unknown as Helia["pins"];
-			mockStat.mockResolvedValue({});
-
-			await service.pin(testCid);
-
-			expect(mockStat).toHaveBeenCalled();
-		});
-
-		it("должен использовать fallback если pins отсутствует", async () => {
-			const testCid = "QmPinNoPins";
-			service["helia"].pins = undefined as unknown as Helia["pins"];
-			mockStat.mockResolvedValue({});
-
-			await service.pin(testCid);
-
-			expect(mockStat).toHaveBeenCalled();
 		});
 
 		it("должен обработать ошибку при pin", async () => {
 			const testCid = "QmPinError";
-			const error = new Error("Pin error");
-			// Мокируем withRetry чтобы ошибка попала в catch блок напрямую
-			service["withRetry"] = jest.fn().mockRejectedValue(error);
-			mockPinsAdd.mockReturnValue({
-				[Symbol.asyncIterator]: async function* () {
-					throw error;
-				},
+			service["config"].retry = { maxAttempts: 1, delay: 0 };
+			fetchMock.mockResolvedValue({
+				ok: false,
+				status: 500,
+				text: async () => "Pin error",
 			});
-
-			await expect(service.pin(testCid)).rejects.toThrow(IpfsError);
-		});
-
-		it("должен обработать ошибку при pin через stat fallback", async () => {
-			const testCid = "QmPinErrorMetrics";
-			service["helia"].pins = undefined as unknown as Helia["pins"];
-			service["fs"].stat = jest.fn().mockRejectedValue(new Error("Stat error"));
 
 			await expect(service.pin(testCid)).rejects.toThrow(IpfsError);
 		});
@@ -538,66 +565,39 @@ describe("IpfsCoreService", () => {
 			await service.onModuleInit();
 		});
 
-		it("должен открепить файл используя pins.rm", async () => {
+		it("должен открепить файл через Kubo /pin/rm", async () => {
 			const testCid = "QmUnpin";
-			// Убеждаемся, что pins.rm доступен
-			service["helia"].pins = {
-				add: mockPinsAdd,
-				rm: mockPinsRm,
-			} as unknown as Helia["pins"];
-			mockPinsRm.mockReturnValue({
-				[Symbol.asyncIterator]: async function* () {
-					yield {} as CID;
-				},
-			});
 
 			await service.unpin(testCid);
 
-			expect(mockPinsRm).toHaveBeenCalled();
-			expect(loggerService.log).toHaveBeenCalledWith(expect.stringMatching(/File unpinned/));
-		});
-
-		it("должен обработать случай когда pins.rm не функция", async () => {
-			const testCid = "QmUnpinNoRm";
-			service["helia"].pins = { add: mockPinsAdd, rm: null } as unknown as Helia["pins"];
-
-			await service.unpin(testCid);
-
-			expect(loggerService.log).toHaveBeenCalledWith(expect.stringMatching(/File unpinned/));
-		});
-
-		it("должен обработать случай когда pins отсутствует", async () => {
-			const testCid = "QmUnpinNoPins";
-			service["helia"].pins = undefined as unknown as Helia["pins"];
-
-			await service.unpin(testCid);
-
+			expect(fetchMock).toHaveBeenCalledWith(
+				`${KUBO_API_URL}/pin/rm?arg=${testCid}`,
+				expect.objectContaining({ method: "POST" })
+			);
 			expect(loggerService.log).toHaveBeenCalledWith(expect.stringMatching(/File unpinned/));
 		});
 
 		it("должен обработать ошибку при unpin", async () => {
 			const testCid = "QmUnpinError";
-			const error = new Error("Unpin error");
-			// Убеждаемся, что pins.rm доступен
-			service["helia"].pins = {
-				add: mockPinsAdd,
-				rm: mockPinsRm,
-			} as unknown as Helia["pins"];
-			mockPinsRm.mockReturnValue({
-				[Symbol.asyncIterator]: async function* () {
-					throw error;
-				},
+			service["config"].retry = { maxAttempts: 1, delay: 0 };
+			fetchMock.mockResolvedValue({
+				ok: false,
+				status: 500,
+				text: async () => "Unpin error",
 			});
 
 			await expect(service.unpin(testCid)).rejects.toThrow(IpfsError);
 		});
 
-		it("должен обработать ошибку при unpin и залогировать метрики", async () => {
-			const testCid = "QmUnpinErrorMetrics";
-			// Используем withRetry чтобы вызвать ошибку в catch блоке
-			service["withRetry"] = jest.fn().mockRejectedValue(new Error("Unpin error"));
+		it("должен не выбрасывать ошибку при 'not pinned'", async () => {
+			const testCid = "QmUnpinNotPinned";
+			fetchMock.mockResolvedValueOnce({
+				ok: false,
+				status: 500,
+				text: async () => "not pinned",
+			});
 
-			await expect(service.unpin(testCid)).rejects.toThrow(IpfsError);
+			await expect(service.unpin(testCid)).resolves.not.toThrow();
 		});
 	});
 
@@ -609,24 +609,37 @@ describe("IpfsCoreService", () => {
 			expect(result).toBe(false);
 		});
 
-		it("должен вернуть false если helia не инициализирован", async () => {
+		it("должен вернуть false если kuboApiUrl не инициализирован", async () => {
 			service["isInitialized"] = true;
-			service["helia"] = undefined as unknown as Helia;
+			service["kuboApiUrl"] = undefined as unknown as string;
 			const result = await service.healthCheck();
 
 			expect(result).toBe(false);
 		});
 
-		it("должен вернуть true если все инициализировано", async () => {
+		it("должен вернуть true если Kubo API доступен", async () => {
 			await service.onModuleInit();
 			const result = await service.healthCheck();
 
+			expect(fetchMock).toHaveBeenCalledWith(
+				`${KUBO_API_URL}/id`,
+				expect.objectContaining({ method: "POST" })
+			);
 			expect(result).toBe(true);
 		});
 
-		it("должен вернуть false при ошибке в healthCheck", async () => {
+		it("должен вернуть false при ошибке Kubo API", async () => {
 			await service.onModuleInit();
-			service["withTimeout"] = jest.fn().mockRejectedValue(new Error("Timeout error"));
+			fetchMock.mockResolvedValueOnce({ ok: false });
+
+			const result = await service.healthCheck();
+
+			expect(result).toBe(false);
+		});
+
+		it("должен вернуть false при сетевой ошибке", async () => {
+			await service.onModuleInit();
+			fetchMock.mockRejectedValueOnce(new Error("Network error"));
 
 			const result = await service.healthCheck();
 
@@ -819,21 +832,22 @@ describe("IpfsCoreService", () => {
 	describe("ensureInitialized", () => {
 		it("должен выбросить ошибку если helia не инициализирован", async () => {
 			service["isInitialized"] = true;
-			service["helia"] = undefined as unknown as Helia;
+			service["helia"] = undefined as never;
 
 			expect(() => service["ensureInitialized"]()).toThrow(IpfsError);
 		});
 	});
 
-	describe("onModuleInit", () => {
+	describe("onModuleInit (config variants)", () => {
 		it("должен работать с массивом URL", async () => {
 			const configWithArray: IpfsConfig = {
-				url: ["http://localhost:5001", "http://localhost:5002"],
+				url: [KUBO_API_URL, "http://localhost:5002/api/v0"],
 			};
 
 			const serviceWithArray = new IpfsCoreService(configWithArray, loggerService);
 			await serviceWithArray.onModuleInit();
 
+			expect(serviceWithArray["kuboApiUrl"]).toBe(KUBO_API_URL);
 			expect(trustlessGateway).toHaveBeenCalledWith({
 				gateways: configWithArray.url,
 			});
@@ -841,7 +855,7 @@ describe("IpfsCoreService", () => {
 
 		it("должен использовать heliaOptions из конфига", async () => {
 			const configWithOptions: IpfsConfig = {
-				url: "http://localhost:5001",
+				url: KUBO_API_URL,
 				heliaOptions: {},
 			};
 

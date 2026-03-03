@@ -19,13 +19,26 @@ describe("IpfsCoreModule", () => {
 	let module: TestingModule;
 	let ipfsCoreService: IpfsCoreService;
 	let configService: ConfigService;
+	let fetchSpy: jest.SpyInstance;
 
 	const mockIpfsConfig: IpfsConfig = {
-		url: "http://test-ipfs:5001",
+		url: "http://test-ipfs:5001/api/v0",
 	};
 
 	beforeEach(async () => {
 		jest.clearAllMocks();
+		// Мокируем fetch для Kubo API /id
+		fetchSpy = jest
+			.spyOn(global, "fetch")
+			.mockImplementation(async (...args: Parameters<typeof fetch>) => {
+				const input = args[0];
+				const url =
+					typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+				if (url.includes("/id")) {
+					return { ok: true, json: async () => ({ ID: "test-peer-id" }) } as Response;
+				}
+				return { ok: false } as Response;
+			});
 		createHeliaHTTP.mockResolvedValue(mockHelia);
 		trustlessGateway.mockReturnValue({});
 		unixfs.mockReturnValue(mockFs);
@@ -49,6 +62,7 @@ describe("IpfsCoreModule", () => {
 	});
 
 	afterEach(async () => {
+		fetchSpy?.mockRestore();
 		if (module) {
 			await module.close();
 		}
@@ -272,11 +286,6 @@ describe("IpfsCoreModule", () => {
 		});
 
 		it("должен инициализировать сервис при создании модуля", async () => {
-			jest.clearAllMocks();
-			createHeliaHTTP.mockResolvedValue(mockHelia);
-			trustlessGateway.mockReturnValue({});
-			unixfs.mockReturnValue(mockFs);
-
 			const initModule = await Test.createTestingModule({
 				imports: [
 					ConfigModule.forRoot({

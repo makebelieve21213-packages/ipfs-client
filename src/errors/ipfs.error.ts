@@ -1,4 +1,4 @@
-import { IpfsErrorType, type IpfsErrorCause } from "src/types/ipfs-error.types.js";
+import { IpfsErrorType, type IpfsErrorCause } from "src/types/ipfs-error.types";
 
 // Пользовательская ошибка для IPFS клиента
 export default class IpfsError extends Error {

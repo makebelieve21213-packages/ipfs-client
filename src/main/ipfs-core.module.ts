@@ -1,11 +1,11 @@
 import { LoggerModule } from "@makebelieve21213-packages/logger";
 import { DynamicModule, Global, Module, Type } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import IpfsCoreService from "src/main/ipfs-core.service.js";
-import { IPFS_CONFIG_TOKEN } from "src/utils/injections.js";
+import IpfsCoreService from "src/main/ipfs-core.service";
+import { IPFS_CONFIG_TOKEN } from "src/utils/injections";
 
 import type { InjectionToken, Provider } from "@nestjs/common";
-import type IpfsConfig from "src/types/ipfs-config.js";
+import type IpfsConfig from "src/types/ipfs-config";
 
 // Глобальный модуль, предоставляющий клиент ipfs-core для доступа к сети ipfs (облачная сеть)
 @Global()

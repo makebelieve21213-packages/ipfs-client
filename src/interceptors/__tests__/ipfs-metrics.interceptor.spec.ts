@@ -98,6 +98,22 @@ describe("IpfsMetricsInterceptor", () => {
 			});
 		});
 
+		it("должен логировать ошибку с non-Error объектом", (done) => {
+			const error = { code: 500, msg: "Server error" };
+			callHandler.handle.mockReturnValue(throwError(() => error));
+
+			const result = interceptor.intercept(executionContext, callHandler);
+
+			(result as Observable<unknown>).subscribe({
+				error: () => {
+					expect(loggerService.error).toHaveBeenCalledWith(
+						expect.stringMatching(/\[IPFS Metrics\] GET \/test - \d+ms - ERROR: \[object Object\]/)
+					);
+					done();
+				},
+			});
+		});
+
 		it("должен вернуть observable из callHandler", () => {
 			const observable = of("test");
 			callHandler.handle.mockReturnValue(observable);

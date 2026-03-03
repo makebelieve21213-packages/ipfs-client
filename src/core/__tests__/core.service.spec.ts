@@ -523,8 +523,9 @@ describe("CoreService", () => {
 		});
 
 		it("должен использовать контекст при логировании когда error не является Error", async () => {
-			const stringError = "string error";
-			const operation = jest.fn().mockRejectedValue(new Error("test"));
+			// withTimeout spy выбрасывает non-Error — покрывает String(error) в контексте (строка 178)
+			const rawError = "string error";
+			const operation = jest.fn().mockRejectedValue(new Error("ignored"));
 
 			const configWithRetry: IpfsConfig = {
 				url: "http://localhost:5001",
@@ -535,32 +536,28 @@ describe("CoreService", () => {
 			};
 
 			const serviceWithRetry = new TestCoreService(configWithRetry, loggerService);
-
-			// Мокируем withTimeout чтобы он выбрасывал не Error напрямую
-			// Это покрывает случай когда error не является Error в строке 179
+			type WithTimeout = {
+				withTimeout: <T>(operation: () => Promise<T>, operationName: string) => Promise<T>;
+			};
 			const withTimeoutSpy = jest
-				.spyOn(serviceWithRetry, "testWithTimeout")
-				.mockImplementation(async () => {
-					throw stringError;
-				});
+				.spyOn(CoreService.prototype as unknown as WithTimeout, "withTimeout")
+				.mockRejectedValue(rawError as unknown);
 
-			await expect(
-				serviceWithRetry.testWithRetry(operation, "testOperation", { key: "value" })
-			).rejects.toThrow();
+			try {
+				await expect(
+					serviceWithRetry.testWithRetry(operation, "testOperation", { key: "value" })
+				).rejects.toThrow();
 
-			expect(loggerService.warn).toHaveBeenCalledWith(expect.stringMatching(/Retrying testOperation/));
-			// Проверяем что ошибка обрабатывается как строка в контексте
-			// Ошибка должна быть преобразована в строку через String(error)
-			const warnCall = loggerService.warn.mock.calls.find(
-				(call) => call[0].includes("Retrying testOperation") && call[0].includes('"key":"value"')
-			);
-			expect(warnCall).toBeDefined();
-			// Проверяем что ошибка присутствует в контексте (может быть обернута)
-			if (warnCall) {
-				expect(warnCall[0]).toContain('"error"');
+				const warnCall = loggerService.warn.mock.calls.find(
+					(call) => call[0].includes("Retrying testOperation") && call[0].includes('"key":"value"')
+				);
+				expect(warnCall).toBeDefined();
+				if (warnCall) {
+					expect(warnCall[0]).toContain('"error":"string error"');
+				}
+			} finally {
+				withTimeoutSpy.mockRestore();
 			}
-
-			withTimeoutSpy.mockRestore();
 		});
 
 		it("должен использовать логирование без контекста при ошибке", async () => {
@@ -645,6 +642,28 @@ describe("CoreService", () => {
 			);
 			expect(loggerService.error).toHaveBeenCalledWith(
 				expect.stringMatching(/testOperation failed after 2 attempts - attempts: 2/)
+			);
+		});
+
+		it("должен логировать финальную ошибку с контекстом и non-Error при исчерпании попыток", async () => {
+			const operation = jest.fn().mockRejectedValue(12345);
+
+			const configWithRetry: IpfsConfig = {
+				url: "http://localhost:5001",
+				retry: {
+					maxAttempts: 2,
+					delay: 10,
+				},
+			};
+
+			const serviceWithRetry = new TestCoreService(configWithRetry, loggerService);
+
+			await expect(
+				serviceWithRetry.testWithRetry(operation, "testOp", { cid: "QmTest" })
+			).rejects.toThrow(IpfsError);
+
+			expect(loggerService.error).toHaveBeenCalledWith(
+				expect.stringMatching(/testOp failed after 2 attempts - .*"cid":"QmTest"/)
 			);
 		});
 	});

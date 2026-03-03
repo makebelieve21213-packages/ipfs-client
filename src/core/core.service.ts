@@ -1,13 +1,13 @@
 import { PrometheusService } from "@makebelieve21213-packages/prometheus-client";
 import { RedisClientService } from "@makebelieve21213-packages/redis-client";
 import { CID } from "multiformats";
-import IpfsError from "src/errors/ipfs.error.js";
-import { IpfsErrorType } from "src/types/ipfs-error.types.js";
+import IpfsError from "src/errors/ipfs.error";
+import { IpfsErrorType } from "src/types/ipfs-error.types";
 
 import type { LoggerService } from "@makebelieve21213-packages/logger";
 import type { OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import type IpfsConfig from "src/types/ipfs-config.js";
-import type { CacheEntry } from "src/types/ipfs-core.interface.js";
+import type IpfsConfig from "src/types/ipfs-config";
+import type { CacheEntry } from "src/types/ipfs-core.interface";
 
 // Базовый класс для IPFS сервисов
 export default class CoreService implements OnModuleInit, OnModuleDestroy {

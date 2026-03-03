@@ -1,6 +1,6 @@
 {
   "name": "@makebelieve21213-packages/ipfs-client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "IPFS client module for NestJS to manage decentralized data storage and transfer for NFT metadata",
   "type": "module",
   "main": "./dist/index.js",
