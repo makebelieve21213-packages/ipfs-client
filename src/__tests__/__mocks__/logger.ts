@@ -2,29 +2,13 @@ import { Injectable, Module } from "@nestjs/common";
 
 @Injectable()
 export class LoggerService {
-	setContext(_context: string): void {
-		// Mock implementation
-	}
-
-	log(_message: string): void {
-		// Mock implementation
-	}
-
-	error(_message: string): void {
-		// Mock implementation
-	}
-
-	warn(_message: string): void {
-		// Mock implementation
-	}
-
-	debug(_message: string): void {
-		// Mock implementation
-	}
-
-	verbose(_message: string): void {
-		// Mock implementation
-	}
+	setContext = jest.fn();
+	log = jest.fn();
+	error = jest.fn();
+	warn = jest.fn();
+	debug = jest.fn();
+	verbose = jest.fn();
+	info = jest.fn();
 }
 
 @Module({

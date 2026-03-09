@@ -1,5 +1,3 @@
-import { LoggerService } from "@makebelieve21213-packages/logger";
-import { ConsoleLogger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import {
 	createHeliaHTTP,
@@ -24,62 +22,74 @@ describe("Index exports", () => {
 			expect(IpfsCoreService.name).toBe("IpfsCoreService");
 		});
 
-		it("должен быть конструируемым классом", () => {
-			const mockLoggerService = {
-				setContext: jest.fn(),
-				log: jest.fn(),
-				error: jest.fn(),
-				warn: jest.fn(),
-				debug: jest.fn(),
-				info: jest.fn(),
-			} as unknown as LoggerService;
+		it("должен иметь необходимые методы интерфейса IpfsCoreServiceDto", async () => {
+			const { Test } = await import("@nestjs/testing");
+			const { LoggerModule } = await import("@makebelieve21213-packages/logger");
+			const ipfsCoreModule = await import("src/main/ipfs-core.module");
+			const IpfsCoreModule = ipfsCoreModule.default;
 
-			const mockConfig: IpfsConfig = {
-				url: "http://localhost:5001",
-			};
+			const mockConfig: IpfsConfig = { url: "http://localhost:5001" };
 
-			expect(() => new IpfsCoreService(mockConfig, mockLoggerService)).not.toThrow();
-		});
+			jest.spyOn(global, "fetch").mockResolvedValue({
+				ok: true,
+				json: async () => ({ ID: "test" }),
+			} as Response);
 
-		it("должен иметь необходимые методы интерфейса", () => {
-			const mockLoggerService = {
-				setContext: jest.fn(),
-				log: jest.fn(),
-				error: jest.fn(),
-				warn: jest.fn(),
-				debug: jest.fn(),
-				info: jest.fn(),
-			} as unknown as LoggerService;
+			const moduleRef = await Test.createTestingModule({
+				imports: [
+					LoggerModule,
+					IpfsCoreModule.forRootAsync({
+						useFactory: () => mockConfig,
+						inject: [],
+					}),
+				],
+			}).compile();
+			await moduleRef.init();
 
-			const mockConfig: IpfsConfig = {
-				url: "http://localhost:5001",
-			};
+			const instance = moduleRef.get<IpfsCoreService>(IpfsCoreService) as IpfsCoreService;
 
-			const instance = new IpfsCoreService(mockConfig, mockLoggerService);
-
-			// Проверяем наличие методов из интерфейса IpfsCoreServiceDto
 			expect(typeof instance.addFile).toBe("function");
 			expect(typeof instance.getFile).toBe("function");
 			expect(typeof instance.addJson).toBe("function");
-			expect(typeof instance.onModuleInit).toBe("function");
+			expect(typeof instance.getFileStream).toBe("function");
+			expect(typeof instance.getJson).toBe("function");
+			expect(typeof instance.exists).toBe("function");
+			expect(typeof instance.pin).toBe("function");
+			expect(typeof instance.unpin).toBe("function");
+			expect(typeof instance.healthCheck).toBe("function");
+			expect(typeof instance.getFileMetadata).toBe("function");
+
+			await moduleRef.close();
 		});
 
-		it("должен быть экземпляром правильного класса", () => {
-			const mockLoggerService = {
-				setContext: jest.fn(),
-				log: jest.fn(),
-				error: jest.fn(),
-				warn: jest.fn(),
-				debug: jest.fn(),
-				info: jest.fn(),
-			} as unknown as LoggerService;
+		it("должен быть экземпляром правильного класса", async () => {
+			const { Test } = await import("@nestjs/testing");
+			const { LoggerModule } = await import("@makebelieve21213-packages/logger");
+			const ipfsCoreModule = await import("src/main/ipfs-core.module");
+			const IpfsCoreModule = ipfsCoreModule.default;
 
-			const mockConfig: IpfsConfig = {
-				url: "http://localhost:5001",
-			};
+			const mockConfig: IpfsConfig = { url: "http://localhost:5001" };
 
-			const instance = new IpfsCoreService(mockConfig, mockLoggerService);
+			jest.spyOn(global, "fetch").mockResolvedValue({
+				ok: true,
+				json: async () => ({ ID: "test" }),
+			} as Response);
+
+			const moduleRef = await Test.createTestingModule({
+				imports: [
+					LoggerModule,
+					IpfsCoreModule.forRootAsync({
+						useFactory: () => mockConfig,
+						inject: [],
+					}),
+				],
+			}).compile();
+			await moduleRef.init();
+
+			const instance = moduleRef.get<IpfsCoreService>(IpfsCoreService);
 			expect(instance).toBeInstanceOf(IpfsCoreService);
+
+			await moduleRef.close();
 		});
 	});
 
@@ -99,12 +109,26 @@ describe("Index exports", () => {
 		});
 
 		it("должен иметь метаданные NestJS модуля", async () => {
+			const { LoggerModule } = await import("@makebelieve21213-packages/logger");
+			jest.spyOn(global, "fetch").mockResolvedValue({
+				ok: true,
+				json: async () => ({ ID: "test" }),
+			} as Response);
+
 			const moduleRef = await Test.createTestingModule({
-				imports: [IpfsCoreModule],
+				imports: [
+					LoggerModule,
+					IpfsCoreModule.forRootAsync({
+						useFactory: () => ({ url: "http://localhost:5001" }),
+						inject: [],
+					}),
+				],
 			}).compile();
 
 			expect(moduleRef).toBeDefined();
 			expect(moduleRef.get).toBeDefined();
+
+			await moduleRef.close();
 		});
 
 		it("должен быть экземпляром правильного класса", () => {
@@ -139,26 +163,28 @@ describe("Index exports", () => {
 			createHeliaHTTP.mockResolvedValue(mockHelia);
 			trustlessGateway.mockReturnValue({});
 			unixfs.mockReturnValue(mockFs);
+			jest.spyOn(global, "fetch").mockResolvedValue({
+				ok: true,
+				json: async () => ({ ID: "test" }),
+			} as Response);
 		});
 
 		it("должен правильно работать с NestJS TestingModule", async () => {
+			const { LoggerModule } = await import("@makebelieve21213-packages/logger");
+
 			const mockConfig: IpfsConfig = {
 				url: "http://localhost:5001",
 			};
 
 			const moduleRef = await Test.createTestingModule({
 				imports: [
+					LoggerModule,
 					IpfsCoreModule.forRootAsync({
 						useFactory: () => mockConfig,
 					}),
 				],
-				providers: [
-					{
-						provide: LoggerService,
-						useValue: new ConsoleLogger("IpfsCoreService"),
-					},
-				],
 			}).compile();
+			await moduleRef.init();
 
 			const service = moduleRef.get<IpfsCoreService>(IpfsCoreService);
 			expect(service).toBeDefined();
@@ -168,29 +194,26 @@ describe("Index exports", () => {
 		});
 
 		it("должен корректно создавать экземпляры через NestJS DI", async () => {
+			const { LoggerModule } = await import("@makebelieve21213-packages/logger");
+
 			const mockConfig: IpfsConfig = {
 				url: "http://localhost:5001",
 			};
 
 			const moduleRef = await Test.createTestingModule({
 				imports: [
+					LoggerModule,
 					IpfsCoreModule.forRootAsync({
 						useFactory: () => mockConfig,
 					}),
 				],
-				providers: [
-					{
-						provide: LoggerService,
-						useValue: new ConsoleLogger("IpfsCoreService"),
-					},
-				],
 			}).compile();
+			await moduleRef.init();
 
-			// Проверяем, что сервис создается через DI
 			const service1 = moduleRef.get<IpfsCoreService>(IpfsCoreService);
 			const service2 = moduleRef.get<IpfsCoreService>(IpfsCoreService);
 
-			expect(service1).toBe(service2); // Должно быть синглтоном
+			expect(service1).toBe(service2);
 
 			await moduleRef.close();
 		});

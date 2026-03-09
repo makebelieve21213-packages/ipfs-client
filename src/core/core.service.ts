@@ -11,7 +11,7 @@ import type { CacheEntry } from "src/types/ipfs-core.interface";
 
 // Базовый класс для IPFS сервисов
 export default class CoreService implements OnModuleInit, OnModuleDestroy {
-	protected isInitialized = false;
+	isInitialized = false;
 	protected cache = new Map<string, CacheEntry>();
 	protected redisClient: RedisClientService | null = null;
 	protected prometheusClient: PrometheusService | null = null;
@@ -73,7 +73,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Проверка состояния подключения
-	protected ensureInitialized(): void {
+	ensureInitialized(): void {
 		if (!this.isInitialized) {
 			throw new IpfsError("IPFS service is not initialized", IpfsErrorType.INITIALIZATION, {
 				type: IpfsErrorType.INITIALIZATION,
@@ -105,7 +105,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Валидация CID
-	protected validateCid(cidStr: string): CID {
+	validateCid(cidStr: string): CID {
 		if (!cidStr || typeof cidStr !== "string" || cidStr.trim().length === 0) {
 			throw new IpfsError("CID cannot be empty", IpfsErrorType.VALIDATION, {
 				type: IpfsErrorType.VALIDATION,
@@ -138,7 +138,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Валидация размера данных
-	protected validateDataSize(data: Uint8Array): void {
+	validateDataSize(data: Uint8Array): void {
 		const maxSize = this.config.maxFileSize;
 
 		if (maxSize && data.length > maxSize) {
@@ -151,7 +151,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Retry механизм с экспоненциальной задержкой
-	protected async withRetry<T>(
+	async withRetry<T>(
 		operation: () => Promise<T>,
 		operationName: string,
 		context?: Record<string, unknown>
@@ -291,7 +291,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Получение значения из кэша
-	protected async getFromCache<T>(key: string): Promise<T | null> {
+	async getFromCache<T>(key: string): Promise<T | null> {
 		// Проверка in-memory cache
 		const cached = this.cache.get(key);
 		if (cached && cached.expiresAt > Date.now()) {
@@ -319,7 +319,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Сохранение значения в кэш
-	protected async setCache(key: string, value: unknown, ttl = 3600000): Promise<void> {
+	async setCache(key: string, value: unknown, ttl = 3600000): Promise<void> {
 		// Сохранение в in-memory cache
 		this.cache.set(key, {
 			value,
@@ -339,7 +339,7 @@ export default class CoreService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	// Логирование метрик
-	protected logMetrics(operation: string, duration: number, size?: number, success = true): void {
+	logMetrics(operation: string, duration: number, size?: number, success = true): void {
 		const metrics = {
 			operation,
 			duration,

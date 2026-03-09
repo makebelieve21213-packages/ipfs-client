@@ -10,6 +10,7 @@ import {
 } from "src/__tests__/__mocks__/helia";
 import IpfsCoreModule from "src/main/ipfs-core.module";
 import IpfsCoreService from "src/main/ipfs-core.service";
+import HeliaClientService from "src/main/services/helia-client.service";
 import { IPFS_CONFIG_TOKEN } from "src/utils/injections";
 
 import type { TestingModule } from "@nestjs/testing";
@@ -56,6 +57,8 @@ describe("IpfsCoreModule", () => {
 				}),
 			],
 		}).compile();
+
+		await module.init();
 
 		ipfsCoreService = module.get<IpfsCoreService>(IpfsCoreService);
 		configService = module.get<ConfigService>(ConfigService);
@@ -156,8 +159,9 @@ describe("IpfsCoreModule", () => {
 
 	describe("Configuration Integration", () => {
 		it("должен передать конфигурацию в IpfsCoreService", () => {
-			expect(ipfsCoreService["config"]).toBeDefined();
-			expect(ipfsCoreService["config"].url).toBe(mockIpfsConfig.url);
+			const heliaClient = module.get<HeliaClientService>(HeliaClientService);
+			expect(heliaClient.kuboApiUrl).toBeDefined();
+			expect(heliaClient.kuboApiUrl).toBe(mockIpfsConfig.url);
 		});
 
 		it("должен работать с различными URL конфигурациями", async () => {
@@ -165,6 +169,7 @@ describe("IpfsCoreModule", () => {
 			createHeliaHTTP.mockResolvedValue(mockHelia);
 			trustlessGateway.mockReturnValue({});
 			unixfs.mockReturnValue(mockFs);
+			fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ ID: "test" }) } as Response);
 
 			const customUrl = "http://custom-ipfs:8080";
 			const customConfig: IpfsConfig = { url: customUrl };
@@ -182,9 +187,10 @@ describe("IpfsCoreModule", () => {
 					}),
 				],
 			}).compile();
+			await customModule.init();
 
-			const customService = customModule.get<IpfsCoreService>(IpfsCoreService);
-			expect(customService["config"].url).toBe(customUrl);
+			const heliaClient = customModule.get<HeliaClientService>(HeliaClientService);
+			expect(heliaClient.kuboApiUrl).toBe(customUrl);
 
 			await customModule.close();
 		});
@@ -238,15 +244,15 @@ describe("IpfsCoreModule", () => {
 	describe("Service Initialization", () => {
 		it("должен правильно инициализировать IpfsCoreService с зависимостями", () => {
 			expect(ipfsCoreService).toBeDefined();
-			expect(ipfsCoreService["config"]).toBeDefined();
-			expect(ipfsCoreService["config"].url).toBe(mockIpfsConfig.url);
+			const heliaClient = module.get<HeliaClientService>(HeliaClientService);
+			expect(heliaClient.kuboApiUrl).toBe(mockIpfsConfig.url);
 		});
 
 		it("должен инициализировать сервис с доступными методами интерфейса", () => {
 			expect(typeof ipfsCoreService.addFile).toBe("function");
 			expect(typeof ipfsCoreService.addJson).toBe("function");
 			expect(typeof ipfsCoreService.getFile).toBe("function");
-			expect(typeof ipfsCoreService.onModuleInit).toBe("function");
+			expect(typeof ipfsCoreService.healthCheck).toBe("function");
 		});
 	});
 
@@ -302,9 +308,8 @@ describe("IpfsCoreModule", () => {
 
 			await initModule.init();
 
-			const initService = initModule.get<IpfsCoreService>(IpfsCoreService);
-
-			expect(initService["helia"]).toBeDefined();
+			const heliaClient = initModule.get<HeliaClientService>(HeliaClientService);
+			expect(heliaClient.heliaInstance).toBeDefined();
 
 			await initModule.close();
 		});
@@ -371,6 +376,7 @@ describe("IpfsCoreModule", () => {
 			createHeliaHTTP.mockResolvedValue(mockHelia);
 			trustlessGateway.mockReturnValue({});
 			unixfs.mockReturnValue(mockFs);
+			fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ ID: "test" }) } as Response);
 
 			const testModule = await Test.createTestingModule({
 				imports: [
@@ -385,10 +391,11 @@ describe("IpfsCoreModule", () => {
 					}),
 				],
 			}).compile();
+			await testModule.init();
 
 			const service = testModule.get<IpfsCoreService>(IpfsCoreService);
 			expect(service).toBeDefined();
-			expect(service["logger"]).toBeDefined();
+			expect(await service.healthCheck()).toBe(true);
 
 			await testModule.close();
 		});
@@ -398,6 +405,7 @@ describe("IpfsCoreModule", () => {
 			createHeliaHTTP.mockResolvedValue(mockHelia);
 			trustlessGateway.mockReturnValue({});
 			unixfs.mockReturnValue(mockFs);
+			fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ ID: "test" }) } as Response);
 
 			const useFactorySpy = jest.fn().mockReturnValue(mockIpfsConfig);
 
@@ -414,6 +422,7 @@ describe("IpfsCoreModule", () => {
 					}),
 				],
 			}).compile();
+			await testModule.init();
 
 			const service = testModule.get<IpfsCoreService>(IpfsCoreService);
 			expect(service).toBeDefined();

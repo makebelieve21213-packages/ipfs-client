@@ -2,6 +2,11 @@ import { LoggerModule } from "@makebelieve21213-packages/logger";
 import { DynamicModule, Global, Module, Type } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import IpfsCoreService from "src/main/ipfs-core.service";
+import HeliaClientService from "src/main/services/helia-client.service";
+import IpfsAddService from "src/main/services/ipfs-add.service";
+import IpfsCoreInternalService from "src/main/services/ipfs-core-internal.service";
+import IpfsPinService from "src/main/services/ipfs-pin.service";
+import IpfsReadService from "src/main/services/ipfs-read.service";
 import { IPFS_CONFIG_TOKEN } from "src/utils/injections";
 
 import type { InjectionToken, Provider } from "@nestjs/common";
@@ -25,6 +30,11 @@ export default class IpfsCoreModule {
 				},
 				inject: options.inject || [],
 			},
+			IpfsCoreInternalService,
+			HeliaClientService,
+			IpfsAddService,
+			IpfsReadService,
+			IpfsPinService,
 			IpfsCoreService,
 		];
 

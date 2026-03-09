@@ -27,6 +27,8 @@ const config: JestConfigWithTsJest = {
 	testPathIgnorePatterns: ["/node_modules/", "/dist/", "/coverage/"],
 	// Игнорируем dist для устранения дублирования manual mocks
 	modulePathIgnorePatterns: ["<rootDir>/dist"],
+	// V8 coverage — корректнее обрабатывает TypeScript/декораторы
+	coverageProvider: "v8",
 	// Директория для coverage
 	coverageDirectory: "coverage",
 	// Reporters для покрытия
@@ -51,7 +53,8 @@ const config: JestConfigWithTsJest = {
 		"^multiformats$": "<rootDir>/src/__tests__/__mocks__/multiformats.ts",
 		"^@makebelieve21213-packages/logger$": "<rootDir>/src/__tests__/__mocks__/logger.ts",
 		"^@makebelieve21213-packages/redis-client$": "<rootDir>/src/__tests__/__mocks__/redis-client.ts",
-		"^@makebelieve21213-packages/prometheus-client$": "<rootDir>/src/__tests__/__mocks__/prometheus-client.ts",
+		"^@makebelieve21213-packages/prometheus-client$":
+			"<rootDir>/src/__tests__/__mocks__/prometheus-client.ts",
 	},
 	// Сборка покрытия кода
 	collectCoverageFrom: [
@@ -62,20 +65,16 @@ const config: JestConfigWithTsJest = {
 		"!src/index.ts",
 		"!src/types/**/*.ts",
 	],
-	// Высокие пороги покрытия для критичного пакета
-	// 100% lines; statements/functions 99%/94% из-за edge-cases (конструкторы, parameter properties)
 	coverageThreshold: {
 		global: {
-			branches: 90,
-			functions: 90,
+			branches: 95,
+			functions: 100,
 			lines: 100,
-			statements: 90,
+			statements: 100,
 		},
 	},
 	// Трансформация ESM модулей из @makebelieve21213-packages
-	transformIgnorePatterns: [
-		"node_modules/(?!(@makebelieve21213-packages|@nestjs)/)",
-	],
+	transformIgnorePatterns: ["node_modules/(?!(@makebelieve21213-packages|@nestjs)/)"],
 	// Файл настройки для тестов
 	setupFilesAfterEnv: ["<rootDir>/src/__tests__/setup.ts"],
 };
